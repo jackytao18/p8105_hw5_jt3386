@@ -8,6 +8,7 @@ output: github_document
 ```{r, include = FALSE,message=FALSE,warning=FALSE}
 library(tidyverse)
 library(readxl)
+library(plotly)
 
 knitr::opts_chunk$set(
 	echo = TRUE,
@@ -38,9 +39,9 @@ We first created a dataframe containing all file names using `list.files` functi
 
 ```{r}
 files_df = tibble(
-  files_name = list.files("data/")) %>% 
+  files_name = list.files("data/problem_1/")) %>% 
   mutate(
-    files_path = str_c("data/",files_name),
+    files_path = str_c("data/problem_1/",files_name),
     data = map(files_path, read_csv)
   ) %>% 
   unnest(data) %>% 
@@ -56,6 +57,8 @@ files_df = tibble(
     names_prefix = "week_"
   )
 
+files_df
+
 files_df %>% 
   ggplot(aes(x = week, y = observations)) +
   geom_line() +
@@ -63,3 +66,76 @@ files_df %>%
 ```
 
 We made a spaghetti plot showing observations on each subject over time. As we can see in the plot, the observations are obviously higher in the experimental arm than in the control arm for each week. What's more, in the control arm, the observations seem to be at the same level over time, but in the experimental arm, the observations increase as time goes by.
+
+
+### Problem 2
+
+First, we import the data.
+
+```{r}
+homicides_df = read_csv("data/problem_2/homicide-data.csv") 
+```
+
+The raw data has `r nrow(homicides_df)` rows and `r ncol(homicides_df)` columns. The variables include `r names(homicides_df)`.
+
+Then we created a `city_state` variable and summarized within cities to obtain the total number of homicides and the number of unsolved homicides.
+
+```{r}
+homicides_df = 
+  homicides_df %>% 
+  mutate(
+    state = ifelse(city == "Tulsa",
+                   "OK",
+                   state),
+    city_state = str_c(city, ", ", state)
+  )
+
+n_homicides = 
+  homicides_df %>% 
+  group_by(city_state) %>% 
+  summarise(
+    n_total_homicides = n()
+  )
+
+n_homicides
+
+n_unsolved = 
+  homicides_df %>% 
+  filter(disposition %in% c("Closed without arrest", "Open/No arrest")) %>% 
+  group_by(city_state) %>% 
+  summarise(
+    n_unsolved_homicides = n()
+  )
+
+n_unsolved
+
+n_df = left_join(n_homicides,n_unsolved)
+```
+
+```{r}
+baltimore_df =
+  n_df %>% 
+  filter(city_state == "Baltimore, MD")
+
+output_p_test = 
+  prop.test(x = baltimore_df$n_unsolved_homicides, n = baltimore_df$n_total_homicides) %>% 
+  broom::tidy()
+
+```
+
+```{r}
+n_df %>% 
+  mutate(
+    output_p_test = map2(.x = n_unsolved_homicides, .y = n_total_homicides, ~broom::tidy(prop.test(x = .x, n = .y)))
+  ) %>% 
+  unnest(output_p_test) %>% 
+  rename(estimated_proportion = estimate) %>% 
+  select(city_state, n_total_homicides, n_unsolved_homicides, estimated_proportion, conf.low, conf.high) %>% 
+  mutate(
+    city_state = fct_reorder(city_state, estimated_proportion)
+  ) %>% 
+  ggplot(aes(x = city_state, y = estimated_proportion)) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+```
+
