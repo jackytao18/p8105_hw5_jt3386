@@ -7,6 +7,7 @@ output: github_document
 
 ```{r, include = FALSE,message=FALSE,warning=FALSE}
 library(tidyverse)
+library(readxl)
 
 knitr::opts_chunk$set(
 	echo = TRUE,
@@ -27,3 +28,38 @@ options(
 scale_colour_discrete = scale_colour_viridis_d
 scale_fill_discrete = scale_fill_viridis_d
 ```
+
+
+### Problem 1
+
+Our goal is to create a tidy dataframe containing data from all participants, including the subject ID, arm, and observations over time.
+
+We first created a dataframe containing all file names using `list.files` function. Then we added the relative path to the file names in order to be used in `read_csv` function. We iterated over file names and read in data for each subject using `map` and saving the result as a new variable in the dataframe. After that we unnested the data and do some cleaning. We added variables including arm, subject ID, and made the week as a variable using `pivot_longer`.
+
+```{r}
+files_df = tibble(
+  files_name = list.files("data/")) %>% 
+  mutate(
+    files_path = str_c("data/",files_name),
+    data = map(files_path, read_csv)
+  ) %>% 
+  unnest(data) %>% 
+  select(-files_path) %>% 
+  mutate(
+    files_name = str_remove(files_name,".csv")
+  ) %>% 
+  separate(files_name, into = c("arm", "subject_id"), sep = "_") %>% 
+  pivot_longer(
+    week_1:week_8,
+    names_to = "week",
+    values_to = "observations",
+    names_prefix = "week_"
+  )
+
+files_df %>% 
+  ggplot(aes(x = week, y = observations)) +
+  geom_line() +
+  facet_grid(. ~ arm)
+```
+
+We made a spaghetti plot showing observations on each subject over time. As we can see in the plot, the observations are obviously higher in the experimental arm than in the control arm for each week. What's more, in the control arm, the observations seem to be at the same level over time, but in the experimental arm, the observations increase as time goes by.
