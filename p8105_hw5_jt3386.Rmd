@@ -7,8 +7,6 @@ output: github_document
 
 ```{r, include = FALSE,message=FALSE,warning=FALSE}
 library(tidyverse)
-library(readxl)
-library(plotly)
 
 knitr::opts_chunk$set(
 	echo = TRUE,
@@ -70,15 +68,17 @@ We made a spaghetti plot showing observations on each subject over time. As we c
 
 ### Problem 2
 
-First, we import the data.
+First, we imported the data.
 
 ```{r}
 homicides_df = read_csv("data/problem_2/homicide-data.csv") 
+
+homicides_df
 ```
 
 The raw data has `r nrow(homicides_df)` rows and `r ncol(homicides_df)` columns. The variables include `r names(homicides_df)`.
 
-Then we created a `city_state` variable and summarized within cities to obtain the total number of homicides and the number of unsolved homicides.
+Then we created a `city_state` variable and summarized within cities to obtain the total number of homicides and the number of unsolved homicides. I found that one observation might have a typo. The city was Tulsa, but the state was AL. I thought it should be in OK, so I just corrected it.
 
 ```{r}
 homicides_df = 
@@ -109,28 +109,55 @@ n_unsolved =
 
 n_unsolved
 
-n_df = left_join(n_homicides,n_unsolved)
+n_homicides_df = left_join(n_homicides,n_unsolved)
+
+n_homicides_df
 ```
+
+We used `prop.test` to estimate the proportion of homicides that are unsolved in Baltimore, MD, and pulled the estimated proportion and confidence intervals.
 
 ```{r}
 baltimore_df =
-  n_df %>% 
-  filter(city_state == "Baltimore, MD")
+  n_homicides_df %>% 
+  filter(city_state == "Baltimore, MD") 
 
 output_p_test = 
-  prop.test(x = baltimore_df$n_unsolved_homicides, n = baltimore_df$n_total_homicides) %>% 
+  prop.test(x = baltimore_df$n_unsolved_homicides,
+            n = baltimore_df$n_total_homicides) %>% 
   broom::tidy()
 
+estimated_proportion = output_p_test$estimate
+confidence_interval = str_c("(",
+                            output_p_test$conf.low,
+                            ", ",
+                            output_p_test$conf.high,
+                            ")")
+
+estimated_proportion
+confidence_interval
 ```
 
+Now we ran `prop.test` for each of the cities in my dataset, and extracted both the proportion of unsolved homicides and the confidence interval for each. 
+
 ```{r}
-n_df %>% 
+prop_test_df = 
+  n_homicides_df %>% 
   mutate(
-    output_p_test = map2(.x = n_unsolved_homicides, .y = n_total_homicides, ~broom::tidy(prop.test(x = .x, n = .y)))
+    output_p_test = map2(.x = n_unsolved_homicides,
+                         .y = n_total_homicides, 
+                         ~broom::tidy(prop.test(x = .x, n = .y)))
   ) %>% 
   unnest(output_p_test) %>% 
   rename(estimated_proportion = estimate) %>% 
-  select(city_state, n_total_homicides, n_unsolved_homicides, estimated_proportion, conf.low, conf.high) %>% 
+  select(city_state, n_total_homicides, n_unsolved_homicides, estimated_proportion, conf.low, conf.high)
+
+prop_test_df
+```
+
+Finally we created a plot to show the estimates and CIs for each city in order.
+
+```{r}
+prop_test_df %>% 
   mutate(
     city_state = fct_reorder(city_state, estimated_proportion)
   ) %>% 
