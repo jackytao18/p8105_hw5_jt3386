@@ -7,6 +7,7 @@ output: github_document
 
 ```{r, include = FALSE,message=FALSE,warning=FALSE}
 library(tidyverse)
+library(patchwork)
 
 knitr::opts_chunk$set(
 	echo = TRUE,
@@ -166,3 +167,100 @@ prop_test_df %>%
   theme(axis.text.x = element_text(angle = 60, hjust = 1))
 ```
 
+
+### Problem 3
+
+We write a function to do simulation.
+
+```{r}
+sim = function(n = 30, mu, sigma = 5) {
+  
+  sim_dataset = tibble(
+    x = rnorm(n, mean = mu, sd = sigma)
+  )
+  
+}
+```
+
+Set μ=0. Generate 5000 datasets from the model.
+
+```{r}
+results_df = 
+  expand.grid(
+    mu = 0,
+    iteration = 1:5000
+  ) %>% 
+  mutate(
+    dataset = map(.x = mu, ~ sim(mu = .x)),
+    test_result = map(.x = dataset, ~ broom::tidy(t.test(x = .x)))
+  ) %>% 
+  unnest(test_result) %>% 
+  select(mu, iteration, dataset, estimate, p.value)
+
+results_df
+```
+
+Repeat the above for μ={1,2,3,4,5,6}
+
+```{r}
+repeated_df = 
+  expand.grid(
+    mu = 1:6,
+    iteration = 1:5000
+  ) %>% 
+  mutate(
+    dataset = map(.x = mu, ~ sim(mu = .x)),
+    test_result = map(.x = dataset, ~ broom::tidy(t.test(x = .x)))
+  ) %>% 
+  unnest(test_result) %>% 
+  select(mu, iteration, dataset, estimate, p.value)
+
+repeated_df
+```
+
+Make a plot showing the proportion of times the null was rejected (the power of the test) on the y axis and the true value of μ on the x axis.
+
+```{r}
+repeated_df %>% 
+  group_by(mu) %>% 
+  summarise(
+    proportion = sum(p.value < 0.05) / n()
+  ) %>% 
+  ggplot(aes(x = mu, y = proportion)) + 
+  geom_point() +
+  geom_path() +
+  labs(x = "True value of mu", y = "The power of the test")
+```
+
+The power of the test increases as the effect size increases, and the slope or the increasing rate is getting smaller as the effect size increases.
+
+Make a plot showing the average estimate of μ_hat on the y axis and the true value of μ on the x axis. Make a second plot the average estimate of μ_hat only in samples for which the null was rejected on the y axis and the true value of μ on the x axis.
+
+```{r}
+plot_1 = 
+  repeated_df %>% 
+  group_by(mu) %>% 
+  summarise(
+    average = mean(estimate)
+  ) %>% 
+  ggplot(aes(x = mu, y = average)) + 
+  geom_point() + 
+  geom_path() +
+  labs(x = "True value of mu", y = "Average estimate of mu hat")
+
+plot_2 =
+  repeated_df %>% 
+  filter(p.value < 0.05) %>% 
+  group_by(mu) %>% 
+  summarise(
+    average = mean(estimate)
+  ) %>% 
+  ggplot(aes(x = mu, y = average)) + 
+  geom_point() + 
+  geom_path() +
+  labs(x = "True value of mu", y = "Average estimate of mu hat when the null is rejected")
+
+plot_1 + plot_2
+```
+
+When the effect size is small, the sample average of mu hat when the null is rejected is not equal to the true value of mu, actually it's always larger than the true value of mu. However, when the effect size gets larger, the sample average of mu hat when the null is rejected is approximately equal to the true value of mu. That's because as the power is increasing, it is more likely to reject the null, then the average estimate of mu is closer to the one when the null is rejected.
